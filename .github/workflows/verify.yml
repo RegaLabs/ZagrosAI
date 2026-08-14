@@ -1,0 +1,67 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm -r --filter './packages/*' build
+
+      - name: Build apps
+        run: pnpm --filter @zagros/server build && pnpm --filter @zagros/runner build && pnpm --filter @zagros/web build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Unit tests
+        run: pnpm -r test
+
+      - name: Browser install (Playwright system Chrome)
+        run: echo "Using system chrome via playwright-core" && which google-chrome || true
+
+      - name: Verify v0.1.0 (kernel)
+        run: pnpm verify
+
+      - name: Verify v0.3.0 (OAuth + approvals)
+        run: pnpm verify:v03
+
+      - name: Verify v0.4.0 (computer)
+        run: pnpm verify:v04
+
+      - name: Verify v0.5.0 (memory + skills)
+        run: pnpm verify:v05
+
+      - name: Verify v0.6.0 (models + ACP)
+        run: pnpm verify:v06
+
+      - name: Verify v0.7.0 (routines)
+        run: pnpm verify:v07
+
+      - name: Verify v0.8.0 (multi-agent + A2A)
+        run: pnpm verify:v08
+
+      - name: Verify v0.9.0 (hardening)
+        run: pnpm verify:v09
+
+      - name: Verify v1.0.0 (gauntlet)
+        run: pnpm verify:v1

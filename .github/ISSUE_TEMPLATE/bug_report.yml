@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible problem
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for taking the time to fill out this bug report. Security issues must NOT be reported here - see SECURITY.md."
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: What version or commit are you running?
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you see instead? Include logs, task statuses, and error text.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Commands, configuration, and anything needed to reproduce.
+      placeholder: |
+        1. pnpm dev
+        2. Create agent ...
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options: [Local, Cloudflare, Both, N/A]
+    validations:
+      required: true

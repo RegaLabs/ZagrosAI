@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+data/
+.env
+.env.local
+*.log
+.DS_Store
+.wrangler/
+dev-dist/
+coverage/
+workspace/
+apps/cloudflare/worker-configuration.d.ts

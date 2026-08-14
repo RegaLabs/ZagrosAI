@@ -1,0 +1,45 @@
+{
+  "name": "zagros",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Open-source runtime for persistent AI agents",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "workbox-build",
+      "@tailwindcss/oxide"
+    ]
+  },
+  "scripts": {
+    "build": "pnpm -r --filter './packages/*' build && pnpm --filter @zagros/server build && pnpm --filter @zagros/runner build && pnpm --filter @zagros/web build",
+    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @zagros/server dev\" \"pnpm --filter @zagros/web dev\"",
+    "dev:cloud": "pnpm --filter @zagros/web build && pnpm --filter @zagros/cloudflare dev",
+    "dev:runner": "pnpm --filter @zagros/runner dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "verify": "node scripts/verify-v0.1.0.mjs",
+    "verify:cloud": "node scripts/verify-v0.2.0.mjs",
+    "verify:v03": "node scripts/verify-v0.3.0.mjs",
+    "verify:v04": "node scripts/verify-v0.4.0.mjs",
+    "verify:v05": "node scripts/verify-v0.5.0.mjs",
+    "verify:v06": "node scripts/verify-v0.6.0.mjs",
+    "verify:v07": "node scripts/verify-v0.7.0.mjs",
+    "verify:v08": "node scripts/verify-v0.8.0.mjs",
+    "verify:v09": "node scripts/verify-v0.9.0.mjs",
+    "verify:v1": "node scripts/verify-v1.0.0.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "ws": "^8.21.3"
+  }
+}

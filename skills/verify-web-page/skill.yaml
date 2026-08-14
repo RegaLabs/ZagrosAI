@@ -1,0 +1,33 @@
+name: verify-web-page
+version: 1.0.0
+
+description: >
+  Verify that a web page exists and contains expected content. Use this skill
+  when asked to check a website, confirm a page is live, or validate that
+  specific text appears on a page.
+
+requires:
+  tools:
+    - http.fetch
+    - browser.text
+  capabilities:
+    - browser
+
+approval:
+  browser.navigate: optional
+  shell.exec: denied
+
+verification:
+  - page_reachable
+  - expected_text_found
+
+tests:
+  - "echo verify-web-page: test ok"
+
+permissions:
+  secrets: false
+
+tags:
+  - web
+  - verification
+  - browser

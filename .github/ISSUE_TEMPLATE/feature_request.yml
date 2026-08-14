@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a new capability or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The user-facing need, not the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Sketch the design or the change you have in mind.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options: [Kernel / control plane, Runner, Web UI, Protocol, Docs, Other]
+    validations:
+      required: true
