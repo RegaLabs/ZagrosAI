@@ -81,7 +81,14 @@ async function main() {
   mkdirSync(join(skillsDir, "untrusted-skill"), { recursive: true });
 
   console.log("--- signed skills ---");
-  const { parse: parseYaml } = await import("yaml");
+  let parseYaml;
+  try {
+    const yamlMod = await import("yaml");
+    parseYaml = yamlMod.parse;
+  } catch {
+    const yamlMod = await import(join(ROOT, "packages/skills/node_modules/yaml/index.js"));
+    parseYaml = yamlMod.parse;
+  }
   const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
   const publicPem = publicKey.export({ type: "spki", format: "pem" });
   const signingKey = createPrivateKey({ key: privateKey.export({ type: "pkcs8", format: "pem" }), dsaEncoding: "ieee-p1363" });
