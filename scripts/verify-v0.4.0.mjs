@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const PORT = 8787;
+const PORT = Number(process.env.ZAGROS_PORT ?? (18400 + (Date.now() % 1000)));
 const MOCK_PORT = 13000 + (Date.now() % 10000);
 const WORKDIR = join(tmpdir(), `zagros-verify-v04-${Date.now()}`);
 const SERVER_LOG = join(WORKDIR, "server.log");
@@ -59,11 +59,7 @@ async function req(method, path, body) {
 }
 
 async function main() {
-  spawnSync("bash", ["-c", 'PIDS=$(ss -tlnp 2>/dev/null | grep ":8787 " | grep -oP "pid=\\K[0-9]+" | sort -u); for p in $PIDS; do kill -9 $p 2>/dev/null; done'], { stdio: "ignore" });  // kill-port-8787
-
-  spawnSync("pkill", ["-f", "dist/index.js"], { stdio: "ignore" });
-  spawnSync("pkill", ["-f", "mock-model"], { stdio: "ignore" });
-  spawnSync("pkill", ["-f", "mock-oauth-mcp"], { stdio: "ignore" });
+  spawnSync("bash", ["-c", `PIDS=$(ss -tlnp 2>/dev/null | grep ":${PORT} " | grep -oP "pid=\\K[0-9]+" | sort -u); for p in $PIDS; do kill -9 $p 2>/dev/null; done`], { stdio: "ignore" });
   await sleep(500);
 
   mkdirSync(WORKDIR, { recursive: true });
@@ -219,9 +215,6 @@ async function main() {
     server.kill("SIGTERM");
     model.kill("SIGTERM");
     mock.kill("SIGTERM");
-    spawnSync("pkill", ["-f", "zagros/server"], { stdio: "ignore" });
-    spawnSync("pkill", ["-f", "mock-model"], { stdio: "ignore" });
-    spawnSync("pkill", ["-f", "mock-oauth-mcp"], { stdio: "ignore" });
   }
 
   console.log(`\n${PASS.length} checks passed, ${FAIL.length} failed`);

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const PORT = 8787;
+const PORT = Number(process.env.ZAGROS_PORT ?? (18700 + (Date.now() % 1000)));
 const MOCK_PORT = 16000 + (Date.now() % 10000);
 const WORKDIR = join(tmpdir(), `zagros-verify-v07-${Date.now()}`);
 const SERVER_LOG = join(WORKDIR, "server.log");
@@ -59,26 +59,22 @@ async function req(method, path, body) {
 }
 
 async function main() {
-  spawnSync("bash", ["-c", 'PIDS=$(ss -tlnp 2>/dev/null | grep ":8787 " | grep -oP "pid=\\K[0-9]+" | sort -u); for p in $PIDS; do kill -9 $p 2>/dev/null; done'], { stdio: "ignore" });  // kill-port-8787
-
-  spawnSync("pkill", ["-f", "dist/index.js"], { stdio: "ignore" });
-  spawnSync("pkill", ["-f", "mock-model"], { stdio: "ignore" });
-  spawnSync("pkill", ["-f", "mock-oauth-mcp"], { stdio: "ignore" });
+  spawnSync("bash", ["-c", `PIDS=$(ss -tlnp 2>/dev/null | grep ":${PORT} " | grep -oP "pid=\\K[0-9]+" | sort -u); for p in $PIDS; do kill -9 $p 2>/dev/null; done`], { stdio: "ignore" });
   await sleep(500);
   mkdirSync(WORKDIR, { recursive: true });
   console.log(`v0.7.0 verify workspace: ${WORKDIR}`);
 
-  const mock = spawn("node", ["scripts/mock-oauth-mcp.mjs"], {
+  const mock = spawn("node", ["scripts/mock-o-v7.mjs"], {
     cwd: ROOT,
     env: { ...process.env, MOCK_OAUTH_PORT: String(MOCK_PORT) },
     stdio: "inherit",
   });
-  const model = spawn("node", ["scripts/mock-model.mjs"], {
+  const model = spawn("node", ["scripts/mock-m-v7.mjs"], {
     cwd: ROOT,
     env: { ...process.env, MOCK_MODEL_PORT: String(MOCK_PORT + 1), MOCK_FLOW: "memory", MOCK_REPLY: "routine-run-ok" },
     stdio: "inherit",
   });
-  const failingModel = spawn("node", ["scripts/mock-model.mjs"], {
+  const failingModel = spawn("node", ["scripts/mock-m-v7.mjs"], {
     cwd: ROOT,
     env: { ...process.env, MOCK_MODEL_PORT: String(MOCK_PORT + 2), MOCK_FLOW: "fail" },
     stdio: "inherit",
@@ -91,7 +87,7 @@ async function main() {
   }).then((r) => r.ok).catch(() => false);
   if (!modelOk) throw new Error(`mock model did not come up on ${MOCK_PORT + 1}`);
 
-  const server = spawn("pnpm", ["--filter", "@zagros/server", "start"], {
+  const server = spawn("node", [join(ROOT, "apps/server/dist/server-v07.js")], {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -271,9 +267,6 @@ async function main() {
     model.kill("SIGTERM");
     failingModel.kill("SIGTERM");
     mock.kill("SIGTERM");
-    spawnSync("pkill", ["-f", "zagros/server"], { stdio: "ignore" });
-    spawnSync("pkill", ["-f", "mock-model"], { stdio: "ignore" });
-    spawnSync("pkill", ["-f", "mock-oauth-mcp"], { stdio: "ignore" });
   }
 
   console.log(`\n${PASS.length} checks passed, ${FAIL.length} failed`);

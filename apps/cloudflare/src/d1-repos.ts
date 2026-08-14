@@ -1028,8 +1028,8 @@ export class D1Repos implements Repos {
       )
       .bind(
         artifact.id,
-        artifact.key,
-        artifact.value,
+        artifact.key ?? artifact.id,
+        artifact.value ?? "",
         artifact.agentId ?? null,
         artifact.conversationId ?? null,
         artifact.createdAt,

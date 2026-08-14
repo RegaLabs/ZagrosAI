@@ -25,8 +25,11 @@ export function Composer({ conversationId, busy }: Props) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const canSend = !busy && (text.trim().length > 0 || pending.length > 0);
 
@@ -64,7 +67,7 @@ export function Composer({ conversationId, busy }: Props) {
     }
   };
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = async (files: FileList | File[] | null) => {
     if (!files) return;
     setError(null);
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -88,6 +91,39 @@ export function Composer({ conversationId, busy }: Props) {
       } catch (err) {
         setError(err instanceof Error ? err.message : `Failed to upload "${file.name}"`);
       }
+    }
+  };
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Audio recording is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const file = new File([audioBlob], `voice-note-${Date.now()}.webm`, { type: "audio/webm" });
+        await handleFiles([file]);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Microphone access denied");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
     }
   };
 
@@ -137,10 +173,11 @@ export function Composer({ conversationId, busy }: Props) {
         )}
         <div className="composer-row">
           <button
-            className="icon-btn mic-btn"
-            disabled
-            title="Voice input is not available yet"
-            aria-label="Voice input is not available yet"
+            className={`icon-btn mic-btn ${recording ? "active" : ""}`}
+            style={{ color: recording ? "var(--color-danger, #ef4444)" : undefined }}
+            title={recording ? "Stop recording voice" : "Record voice note"}
+            aria-label={recording ? "Stop recording voice" : "Record voice note"}
+            onClick={() => (recording ? stopRecording() : void startRecording())}
           >
             <IconMic size={18} />
           </button>
@@ -148,7 +185,7 @@ export function Composer({ conversationId, busy }: Props) {
             ref={textareaRef}
             rows={1}
             value={text}
-            placeholder={busy ? "Agent is working…" : "Message…"}
+            placeholder={busy ? "Agent is working…" : recording ? "Recording audio…" : "Message…"}
             onChange={(e) => {
               setText(e.target.value);
               autogrow();
@@ -158,7 +195,8 @@ export function Composer({ conversationId, busy }: Props) {
           />
           <button
             className="icon-btn"
-            aria-label="Attach file"
+            aria-label="Attach photo, video, audio, or document"
+            title="Attach file (image, video, audio, document)"
             onClick={() => fileRef.current?.click()}
           >
             <IconPaperclip size={18} />
@@ -168,6 +206,7 @@ export function Composer({ conversationId, busy }: Props) {
             type="file"
             multiple
             hidden
+            accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.ts,.js,.py,.rs,.go,.cpp,.c,.html,.css"
             onChange={(e) => {
               void handleFiles(e.target.files);
               e.target.value = "";

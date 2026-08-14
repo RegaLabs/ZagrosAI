@@ -3,6 +3,7 @@ export * from "./bridges/generic.js";
 export * from "./bridges/codex.js";
 export * from "./bridges/claude-code.js";
 export * from "./bridges/gemini-cli.js";
+export * from "./bridges/grok-build.js";
 export * from "./bridge-manager.js";
 export * from "./harness.js";
 export * from "./cloud-runner-router.js";

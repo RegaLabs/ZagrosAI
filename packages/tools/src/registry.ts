@@ -30,6 +30,7 @@ export interface ToolDefinition {
   risk: RiskLevel;
   idempotent: boolean;
   secrets?: string[];
+  requirements?: Record<string, boolean>;
   execute: ToolExecutor;
 }
 
@@ -73,6 +74,33 @@ export class ToolRegistry {
 
   list(): ToolDefinition[] {
     return [...this.tools.values()];
+  }
+
+  findRelevantTools(query: string, limit = 40): ToolDefinition[] {
+    const all = [...this.tools.values()];
+    if (!query || query.trim().length === 0) {
+      return all.slice(0, limit);
+    }
+    const terms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
+
+    const scored = all.map((tool) => {
+      let score = 0;
+      const lowerId = tool.id.toLowerCase();
+      const lowerDesc = tool.description.toLowerCase();
+      for (const term of terms) {
+        if (lowerId.includes(term)) score += 5;
+        if (lowerDesc.includes(term)) score += 2;
+      }
+      return { tool, score };
+    });
+
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .map((s) => s.tool)
+      .slice(0, limit);
   }
 
   async execute(id: string, args: unknown, ctx: ToolContext): Promise<ToolResult> {

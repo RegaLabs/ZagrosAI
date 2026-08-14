@@ -277,6 +277,7 @@ export function buildHttpRoutes(kernel: Kernel): HttpRouteTable {
       mcpServers: parsed.data.mcpServers ?? current.mcpServers,
       runnerToken: current.runnerToken,
       runnerWhitelist: current.runnerWhitelist,
+      offline: (parsed.data as { offline?: Settings["offline"] }).offline ?? current.offline,
       policy: parsed.data.policy ?? current.policy,
     };
     const saved = await kernel.updateSettings(next);

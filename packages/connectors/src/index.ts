@@ -3,6 +3,10 @@ import type { Kernel } from "@zagros/kernel";
 import { toolFromZod } from "@zagros/tools";
 import { GitHubProvider } from "./github.js";
 import { GoogleProvider } from "./google.js";
+import { MicrosoftProvider } from "./microsoft.js";
+import { SlackProvider } from "./slack.js";
+import { NotionProvider } from "./notion.js";
+import { DropboxProvider } from "./dropbox.js";
 import type { ConnectorsConfig } from "./config.js";
 
 const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
@@ -10,6 +14,10 @@ const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
 export function registerConnectors(kernel: Kernel, config: ConnectorsConfig): void {
   kernel.oauth.register(new GoogleProvider(config.google ?? {}));
   kernel.oauth.register(new GitHubProvider(config.github ?? {}));
+  kernel.oauth.register(new MicrosoftProvider(config.microsoft ?? {}));
+  kernel.oauth.register(new SlackProvider(config.slack ?? {}));
+  kernel.oauth.register(new NotionProvider(config.notion ?? {}));
+  kernel.oauth.register(new DropboxProvider(config.dropbox ?? {}));
 
   if (!kernel.tools.get("connector.github.api")) {
     kernel.tools.register(
@@ -98,4 +106,8 @@ export function registerConnectors(kernel: Kernel, config: ConnectorsConfig): vo
 
 export { GoogleProvider } from "./google.js";
 export { GitHubProvider } from "./github.js";
+export { MicrosoftProvider } from "./microsoft.js";
+export { SlackProvider } from "./slack.js";
+export { NotionProvider } from "./notion.js";
+export { DropboxProvider } from "./dropbox.js";
 export type { ConnectorsConfig, OAuthAppConfig } from "./config.js";

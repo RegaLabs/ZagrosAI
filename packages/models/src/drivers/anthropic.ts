@@ -1,5 +1,14 @@
 import type { ModelConfig } from "@zagros/domain";
-import { ModelDriverError, type ModelCapabilities, type ModelDriver, type ModelEvent, type ModelMessage, type ModelRequest, type ModelResponse, type ModelToolCall } from "../types.js";
+import {
+  ModelDriverError,
+  type ModelCapabilities,
+  type ModelDriver,
+  type ModelEvent,
+  type ModelMessage,
+  type ModelRequest,
+  type ModelResponse,
+  type ModelToolCall,
+} from "../types.js";
 
 const DEFAULT_MAX_TOKENS = 1024;
 
@@ -96,6 +105,7 @@ export class AnthropicDriver implements ModelDriver {
       parallelTools: true,
       structuredOutput: true,
       supportsFiles: false,
+      maxContext: 200_000,
     };
   }
 
@@ -115,7 +125,11 @@ export class AnthropicDriver implements ModelDriver {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new ModelDriverError(`${this.id}: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 500)}` : ""}`, this.id, res.status);
+      throw new ModelDriverError(
+        `${this.id}: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 500)}` : ""}`,
+        this.id,
+        res.status
+      );
     }
     void stream;
     return res;
@@ -131,6 +145,13 @@ export class AnthropicDriver implements ModelDriver {
       stream,
     };
     if (system) body.system = system;
+    if (request.tools && request.tools.length > 0) {
+      body.tools = request.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.parameters ?? { type: "object", properties: {} },
+      }));
+    }
     return body;
   }
 
@@ -142,6 +163,8 @@ export class AnthropicDriver implements ModelDriver {
     let buffer = "";
     let finishReason = "";
 
+    let currentToolCall: { id: string; name: string; argsJson: string } | null = null;
+
     const processLine = function* (line: string, id: string): Generator<ModelEvent> {
       const trimmed = line.trim();
       if (!trimmed.startsWith("data:")) return;
@@ -150,7 +173,8 @@ export class AnthropicDriver implements ModelDriver {
       let event: {
         type?: string;
         error?: { type?: string; message?: string };
-        delta?: { type?: string; text?: string };
+        delta?: { type?: string; text?: string; partial_json?: string };
+        content_block?: { type: string; id?: string; name?: string };
         message?: { stop_reason?: string };
       };
       try {
@@ -161,8 +185,29 @@ export class AnthropicDriver implements ModelDriver {
       if (event.type === "error" && event.error) {
         throw new ModelDriverError(`${id}: ${event.error.message ?? event.error.type ?? "stream error"}`, id);
       }
+      if (event.type === "content_block_start" && event.content_block?.type === "tool_use") {
+        currentToolCall = {
+          id: event.content_block.id ?? "",
+          name: event.content_block.name ?? "",
+          argsJson: "",
+        };
+      }
       if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
         yield { type: "text", text: event.delta.text };
+      }
+      if (event.type === "content_block_delta" && event.delta?.type === "input_json_delta" && currentToolCall) {
+        currentToolCall.argsJson += event.delta.partial_json ?? "";
+      }
+      if (event.type === "content_block_stop" && currentToolCall) {
+        yield {
+          type: "tool_call",
+          call: {
+            id: currentToolCall.id,
+            name: currentToolCall.name,
+            arguments: currentToolCall.argsJson || "{}",
+          },
+        };
+        currentToolCall = null;
       }
       if (event.type === "message_delta" && event.message?.stop_reason) {
         finishReason = event.message.stop_reason;
@@ -191,9 +236,7 @@ export class AnthropicDriver implements ModelDriver {
     } finally {
       reader.releaseLock();
     }
-    if (finishReason === "tool_use") {
-      throw new ModelDriverError(`${this.id}: tool use is not supported in stream mode for this driver`, this.id);
-    }
+
     const mappedReason =
       finishReason === "max_tokens"
         ? "length"

@@ -57,8 +57,18 @@ export type Agent = z.infer<typeof agentSchema>;
 
 export const artifactSchema = z.object({
   id: idSchema,
-  key: z.string().min(1).max(200),
-  value: z.string(),
+  key: z.string().min(1).max(200).optional(),
+  value: z.string().optional(),
+  name: z.string().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().int().nonnegative().optional(),
+  hash: z.string().optional(),
+  creator: z.string().optional(),
+  taskId: idSchema.optional(),
+  stepId: idSchema.optional(),
+  provenance: z.record(z.unknown()).optional(),
+  url: z.string().optional(),
+  storagePath: z.string().optional(),
   agentId: idSchema.optional(),
   conversationId: idSchema.optional(),
   createdAt: timestampSchema,
@@ -122,11 +132,26 @@ export const conversationSchema = z.object({
 });
 export type Conversation = z.infer<typeof conversationSchema>;
 
+export const executionRequirementsSchema = z.object({
+  edge: z.boolean().default(false),
+  browser: z.boolean().default(false),
+  sandbox: z.boolean().default(false),
+  shell: z.boolean().default(false),
+  filesystem: z.boolean().default(false),
+  docker: z.boolean().default(false),
+  gpu: z.boolean().default(false),
+  model: z.string().optional(),
+  harness: z.string().optional(),
+});
+export type ExecutionRequirements = z.infer<typeof executionRequirementsSchema>;
+
 export const taskStatusSchema = z.enum([
   "queued",
+  "planning",
   "running",
   "waiting_for_tool",
   "waiting_for_approval",
+  "waiting_for_worker",
   "verifying",
   "completed",
   "failed",
@@ -139,6 +164,8 @@ export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export const stepStatusSchema = z.enum([
   "pending",
   "running",
+  "waiting_for_approval",
+  "waiting_for_worker",
   "completed",
   "failed",
   "skipped",
@@ -153,6 +180,8 @@ export const taskStepSchema = z.object({
   taskId: idSchema,
   kind: stepKindSchema,
   objective: z.string().optional(),
+  dependencies: z.array(idSchema).default([]),
+  requirements: executionRequirementsSchema.optional(),
   toolId: z.string().optional(),
   toolArgs: z.record(z.unknown()).optional(),
   workerId: z.string().optional(),
@@ -245,6 +274,11 @@ export const settingsSchema = z.object({
   mcpServers: z.array(mcpServerConfigSchema).default([]),
   runnerToken: z.string().optional(),
   runnerWhitelist: z.array(z.string()).default([]),
+  offline: z
+    .object({
+      unavailableModel: z.enum(["fallback", "pause"]).default("fallback"),
+    })
+    .default({}),
   policy: z
     .object({
       blockedDomains: z.array(z.string()).default([]),
@@ -265,6 +299,7 @@ export function defaultSettings(): Settings {
     },
     mcpServers: [],
     runnerWhitelist: [],
+    offline: { unavailableModel: "fallback" },
     policy: { blockedDomains: [], allowedDomains: [] },
   };
 }

@@ -4,6 +4,10 @@ import { newId, now, type Agent, type Conversation, type Message, type Task } fr
 import { FakeModelDriver, ModelRegistry } from "@zagros/models";
 import { ToolRegistry, createFileTools, createHttpTools, createShellTool } from "@zagros/tools";
 import { RegaHarness, type HarnessDeps, type HarnessPersistence } from "../src/index.js";
+import { IntentClassifier } from "./intent.js";
+import { PlanGraphCompiler } from "./plan-graph.js";
+import { Verifier } from "./verifier.js";
+import { MediaIntelligenceAdapter } from "./media-adapter.js";
 
 function inMemoryPersistence(): HarnessPersistence {
   const messages: Message[] = [];
@@ -333,6 +337,53 @@ describe("RegaHarness", () => {
     expect(result.status).toBe("completed");
     expect(result.steps[0]?.status).toBe("failed");
     expect(result.steps[0]?.error).toContain("unexpected tool crash");
+  });
+
+  it("classifies intents correctly via IntentClassifier", () => {
+    const classifier = new IntentClassifier();
+    expect(classifier.classify("Hello there").kind).toBe("conversational");
+    expect(classifier.classify("audit the authentication pipeline").kind).toBe("verification");
+    expect(classifier.classify("implement new database schema").kind).toBe("code_task");
+    expect(classifier.classify("search latest news about AI").kind).toBe("research");
+    expect(classifier.classify("/files.read").kind).toBe("single_tool");
+  });
+
+  it("compiles DAG plan graphs with dependencies", () => {
+    const compiler = new PlanGraphCompiler();
+    const prompt = "1. Setup project\n2. Implement feature\n3. Run tests";
+    const steps = compiler.compile("task_123", { kind: "plan_graph", confidence: 0.9, requiresVerification: true, requiresPlanGraph: true, description: "" }, prompt);
+    expect(steps.length).toBe(3);
+    expect(steps[0]!.dependencies).toEqual([]);
+    expect(steps[1]!.dependencies).toEqual([steps[0]!.id]);
+    expect(steps[2]!.dependencies).toEqual([steps[1]!.id]);
+
+    const executable = compiler.getExecutableSteps(steps);
+    expect(executable.length).toBe(1);
+    expect(executable[0]!.id).toBe(steps[0]!.id);
+  });
+
+  it("verifies task outcomes with Verifier", () => {
+    const verifier = new Verifier();
+    const task = makeTask("conv_1", "msg_1", "agent_1");
+    const result = verifier.verify(task, "Successfully completed all objectives with full evidence.", [
+      { ok: true, data: { status: "ok" } },
+    ]);
+    expect(result.verified).toBe(true);
+    expect(result.checks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("normalizes media attachments via MediaIntelligenceAdapter", async () => {
+    const adapter = new MediaIntelligenceAdapter();
+    const videoResult = await adapter.normalize({
+      id: "att_1",
+      kind: "video",
+      name: "recording.mp4",
+      mimeType: "video/mp4",
+      size: 1024,
+      createdAt: new Date().toISOString(),
+    });
+    expect(videoResult.kind).toBe("video");
+    expect(videoResult.textRepresentation).toContain("recording.mp4");
   });
 });
 

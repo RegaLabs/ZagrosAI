@@ -1,9 +1,30 @@
 import type { ModelConfig } from "@zagros/domain";
-import { ModelDriverError, type ModelCapabilities, type ModelDriver, type ModelEvent, type ModelMessage, type ModelRequest, type ModelResponse } from "../types.js";
+import {
+  ModelDriverError,
+  type ModelCapabilities,
+  type ModelDriver,
+  type ModelEvent,
+  type ModelMessage,
+  type ModelRequest,
+  type ModelResponse,
+  type ModelToolCall,
+} from "../types.js";
+
+interface GeminiFunctionCall {
+  name: string;
+  args?: Record<string, unknown>;
+}
+
+interface GeminiFunctionResponse {
+  name: string;
+  response: Record<string, unknown>;
+}
 
 interface GeminiPart {
   text?: string;
   inlineData?: { mimeType?: string; data?: string };
+  functionCall?: GeminiFunctionCall;
+  functionResponse?: GeminiFunctionResponse;
 }
 
 interface GeminiContent {
@@ -37,13 +58,36 @@ function convertContents(messages: ModelMessage[]): { system: string; contents: 
       continue;
     }
     if (message.role === "assistant") {
-      contents.push({ role: "model", parts: toParts(message.content) });
+      const parts = toParts(message.content);
+      for (const call of message.toolCalls ?? []) {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.arguments);
+        } catch {
+          args = { _raw: call.arguments };
+        }
+        parts.push({ functionCall: { name: call.name, args } });
+      }
+      contents.push({ role: "model", parts });
       continue;
     }
     if (message.role === "tool") {
+      let responseObj: Record<string, unknown> = {};
+      try {
+        responseObj = typeof message.content === "string" ? JSON.parse(message.content) : message.content;
+      } catch {
+        responseObj = { output: message.content };
+      }
       contents.push({
         role: "user",
-        parts: [{ text: typeof message.content === "string" ? message.content : JSON.stringify(message.content) }],
+        parts: [
+          {
+            functionResponse: {
+              name: message.name ?? "tool",
+              response: responseObj,
+            },
+          },
+        ],
       });
       continue;
     }
@@ -57,23 +101,26 @@ export class GeminiDriver implements ModelDriver {
   readonly config: ModelConfig;
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly isOAuth: boolean;
 
   constructor(config: ModelConfig) {
     this.config = config;
     this.baseUrl = (config.baseUrl ?? "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
     this.apiKey = config.apiKey ?? "";
+    this.isOAuth = !config.apiKey && !!config.baseUrl?.includes("googleapis.com");
   }
 
   async capabilities(): Promise<ModelCapabilities> {
     return {
       textInput: true,
       imageInput: this.config.imageInput ?? true,
-      audioInput: false,
-      videoInput: false,
-      toolCalling: false,
-      parallelTools: false,
-      structuredOutput: false,
-      supportsFiles: false,
+      audioInput: true,
+      videoInput: true,
+      toolCalling: true,
+      parallelTools: true,
+      structuredOutput: true,
+      supportsFiles: true,
+      maxContext: 1_000_000,
     };
   }
 
@@ -89,23 +136,42 @@ export class GeminiDriver implements ModelDriver {
       contents,
       generationConfig: {
         temperature: request.temperature ?? this.config.temperature,
-        maxOutputTokens: request.maxTokens ?? 1024,
+        maxOutputTokens: request.maxTokens ?? 2048,
       },
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
+    if (request.tools && request.tools.length > 0) {
+      body.tools = [
+        {
+          functionDeclarations: request.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters ?? { type: "object", properties: {} },
+          })),
+        },
+      ];
+    }
     return body;
   }
 
   private async request(body: unknown, stream: boolean): Promise<Response> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.isOAuth && this.apiKey) {
+      headers["Authorization"] = `Bearer ${this.apiKey}`;
+    }
     const res = await fetch(this.url(stream), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(300_000),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new ModelDriverError(`${this.id}: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 500)}` : ""}`, this.id, res.status);
+      throw new ModelDriverError(
+        `${this.id}: ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 500)}` : ""}`,
+        this.id,
+        res.status
+      );
     }
     return res;
   }
@@ -125,7 +191,10 @@ export class GeminiDriver implements ModelDriver {
       if (payload === "[DONE]") return;
       let event: {
         error?: { message?: string };
-        candidates?: Array<{ content?: { parts?: GeminiPart[] }; finishReason?: string }>;
+        candidates?: Array<{
+          content?: { parts?: GeminiPart[] };
+          finishReason?: string;
+        }>;
       };
       try {
         event = JSON.parse(payload);
@@ -141,6 +210,16 @@ export class GeminiDriver implements ModelDriver {
       }
       for (const part of candidate?.content?.parts ?? []) {
         if (part.text) yield { type: "text", text: part.text };
+        if (part.functionCall) {
+          yield {
+            type: "tool_call",
+            call: {
+              id: `call_${Math.random().toString(36).slice(2, 9)}`,
+              name: part.functionCall.name,
+              arguments: JSON.stringify(part.functionCall.args ?? {}),
+            },
+          };
+        }
       }
     };
 
@@ -171,7 +250,9 @@ export class GeminiDriver implements ModelDriver {
         ? "length"
         : finishReason === "SAFETY" || finishReason === "RECITATION"
           ? "error"
-          : "stop";
+          : finishReason === "STOP" || finishReason === "stop"
+            ? "stop"
+            : "stop";
 
     yield { type: "done", finishReason: mappedReason };
   }
@@ -187,12 +268,22 @@ export class GeminiDriver implements ModelDriver {
     }
     const candidate = json.candidates?.[0];
     const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+    const toolCalls: ModelToolCall[] = (candidate?.content?.parts ?? [])
+      .filter((p) => !!p.functionCall)
+      .map((p) => ({
+        id: `call_${Math.random().toString(36).slice(2, 9)}`,
+        name: p.functionCall!.name,
+        arguments: JSON.stringify(p.functionCall!.args ?? {}),
+      }));
+
     const finishReason =
-      candidate?.finishReason === "MAX_TOKENS"
-        ? "length"
-        : candidate?.finishReason === "SAFETY" || candidate?.finishReason === "RECITATION"
-          ? "error"
-          : "stop";
-    return { text, toolCalls: [], finishReason };
+      toolCalls.length > 0
+        ? "tool_calls"
+        : candidate?.finishReason === "MAX_TOKENS"
+          ? "length"
+          : candidate?.finishReason === "SAFETY" || candidate?.finishReason === "RECITATION"
+            ? "error"
+            : "stop";
+    return { text, toolCalls, finishReason };
   }
 }

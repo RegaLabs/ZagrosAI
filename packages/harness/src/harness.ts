@@ -20,8 +20,15 @@ import {
   type HarnessRunInput,
 } from "./types.js";
 
+import { IntentClassifier } from "./intent.js";
+import { PlanGraphCompiler } from "./plan-graph.js";
+import { Verifier } from "./verifier.js";
+
 export class RegaHarness {
   private readonly deps: HarnessDeps;
+  private readonly intentClassifier = new IntentClassifier();
+  private readonly planCompiler = new PlanGraphCompiler();
+  private readonly verifier = new Verifier();
 
   constructor(deps: HarnessDeps) {
     this.deps = deps;
@@ -43,6 +50,18 @@ export class RegaHarness {
     try {
       const capabilities = await driver.capabilities();
       const harnessManaged = capabilities.harnessManagedTools === true;
+
+      // Stage 2: Intent Classification
+      const intent = this.intentClassifier.classify(userMessage.content);
+
+      // Stage 5: Plan Graph Compilation (if composite multi-step task)
+      if (intent.requiresPlanGraph && task.steps.length === 0) {
+        task.steps = this.planCompiler.compile(task.id, intent, userMessage.content);
+        task.status = "planning";
+        await persist.updateTask(task);
+        events.emit({ type: "task.updated", task: cloneTask(task) });
+      }
+
       task.status = "running";
       task.startedAt = now();
       await persist.updateTask(task);
@@ -71,6 +90,7 @@ export class RegaHarness {
       }
 
       let iteration = 0;
+      const accumulatedToolResults: ToolResult[] = [];
 
       while (iteration < maxIterations) {
         iteration += 1;
@@ -130,6 +150,25 @@ export class RegaHarness {
         task.modelCalls += 1;
 
         if (toolCalls.length === 0) {
+          // Stage 10: Outcome Verification
+          if (intent.requiresVerification && task.steps.length > 0) {
+            task.status = "verifying";
+            await persist.updateTask(task);
+            events.emit({ type: "task.updated", task: cloneTask(task) });
+
+            const verification = this.verifier.verify(task, text, accumulatedToolResults);
+            if (!verification.verified && iteration < maxIterations) {
+              modelMessages.push({
+                role: "assistant",
+                content: text,
+              });
+              modelMessages.push({
+                role: "user",
+                content: `[VERIFIER FEEDBACK] Outcome verification check failed: ${verification.summary}. Please address the remaining items before completing.`,
+              });
+              continue;
+            }
+          }
           return this.complete(task, persist, events, conversation, agent, text);
         }
 
@@ -223,6 +262,7 @@ export class RegaHarness {
 
           step.status = result.ok ? "completed" : "failed";
           step.result = result.data;
+          accumulatedToolResults.push(result);
           step.error = result.error;
           step.workerId = result.workerId;
           step.updatedAt = now();

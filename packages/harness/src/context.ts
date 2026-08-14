@@ -14,12 +14,15 @@ import type {
   ModelToolCall,
 } from "@zagros/models";
 import type { ToolDefinition, ToolResult } from "@zagros/tools";
+import { MediaIntelligenceAdapter } from "./media-adapter.js";
 import type { AttachmentResolver } from "./types.js";
 
 const MAX_TOOLS_IN_CONTEXT = 40;
 const MAX_TOOL_DESCRIPTION_CHARS = 800;
 const MAX_TOOL_RESULT_CHARS = 32_000;
 const MAX_CONTEXT_PARTS = 8;
+
+const mediaAdapter = new MediaIntelligenceAdapter();
 
 export function describeTools(tools: ToolDefinition[]): string {
   const visible = tools.slice(0, MAX_TOOLS_IN_CONTEXT).map((t) => ({
@@ -53,16 +56,26 @@ async function attachmentToContentPart(
   attachment: Attachment,
   resolve?: AttachmentResolver
 ): Promise<ModelContentPart | undefined> {
-  if (attachment.kind !== "image") return undefined;
-  if (attachment.url) {
-    return { type: "image", data: attachment.url, mimeType: attachment.mimeType };
+  if (attachment.kind === "image") {
+    if (attachment.url) {
+      return { type: "image", data: attachment.url, mimeType: attachment.mimeType };
+    }
+    if (attachment.path && resolve) {
+      const resolved = await resolve(attachment);
+      if (!resolved) return undefined;
+      return { type: "image", data: resolved.data, mimeType: resolved.mimeType ?? attachment.mimeType };
+    }
+    return undefined;
   }
+
+  // Non-image media: video, audio, document, code, file
+  let rawData: string | undefined;
   if (attachment.path && resolve) {
     const resolved = await resolve(attachment);
-    if (!resolved) return undefined;
-    return { type: "image", data: resolved.data, mimeType: resolved.mimeType ?? attachment.mimeType };
+    if (resolved) rawData = resolved.data;
   }
-  return undefined;
+  const normalized = await mediaAdapter.normalize(attachment, rawData);
+  return { type: "text", text: normalized.textRepresentation };
 }
 
 export async function historyToModelMessages(
@@ -166,6 +179,7 @@ export function toolCallToStep(taskId: string, call: ModelToolCall, objective: s
     taskId,
     kind: "tool",
     objective,
+    dependencies: [],
     toolId: call.name,
     toolArgs,
     status: "pending",

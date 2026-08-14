@@ -128,6 +128,8 @@ function BrowserPane({ conversationId }: Props) {
   const toggleScreenshotPolling = useStore((s) => s.toggleScreenshotPolling);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [takeControl, setTakeControl] = useState(false);
+  const [controlStatus, setControlStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,15 +206,41 @@ function BrowserPane({ conversationId }: Props) {
         >
           <IconCamera size={12} /> Live
         </button>
+        <button
+          className={`btn btn-sm ${takeControl ? "btn-danger" : ""}`}
+          onClick={() => setTakeControl((prev) => !prev)}
+          disabled={sessions.length === 0}
+          title="Interactive touch/click takeover on the live computer viewport"
+        >
+          <IconComputer size={12} /> {takeControl ? "Release Control" : "Take Control"}
+        </button>
       </div>
+      {controlStatus && <p className="files-status" style={{ fontSize: 11, color: "var(--color-accent)" }}>{controlStatus}</p>}
       {error && <p className="files-error">{error}</p>}
       {shown ? (
-        <div className="screenshot-wrap">
+        <div className="screenshot-wrap" style={{ cursor: takeControl ? "crosshair" : "default" }}>
           {liveShot !== null && <span className="live-badge">LIVE</span>}
+          {takeControl && <span className="live-badge" style={{ left: 8, right: "auto", background: "var(--color-danger, #ef4444)" }}>CONTROL ACTIVE</span>}
           <img
             className="screenshot-img"
             src={toDataUri(shown)}
             alt="Browser screenshot"
+            onClick={(e) => {
+              if (!takeControl) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = Math.round(((e.clientX - rect.left) / rect.width) * 1280);
+              const y = Math.round(((e.clientY - rect.top) / rect.height) * 800);
+              setControlStatus(`Dispatched click at (${x}, ${y})`);
+              const state = useStore.getState();
+              const sessionId = state.selectedBrowserSessionId ?? state.browserSessions[0]?.id;
+              if (sessionId) {
+                void fetch(`/api/browser/sessions/${encodeURIComponent(sessionId)}/click`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ x, y }),
+                }).then(() => refreshAll()).catch(() => undefined);
+              }
+            }}
           />
         </div>
       ) : offline ? (

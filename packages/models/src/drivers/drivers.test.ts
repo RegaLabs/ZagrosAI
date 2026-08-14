@@ -213,7 +213,7 @@ describe("GeminiDriver", () => {
     expect(body.contents).toHaveLength(1);
   });
 
-  it("reports no tool calling (function calling arrives later)", async () => {
+  it("reports tool calling and multimodal support", async () => {
     const driver = new GeminiDriver({
       driver: "google",
       model: "gemini-2.5-flash",
@@ -223,6 +223,7 @@ describe("GeminiDriver", () => {
       imageInput: false,
     });
     const caps = await driver.capabilities();
-    expect(caps.toolCalling).toBe(false);
+    expect(caps.toolCalling).toBe(true);
+    expect(caps.structuredOutput).toBe(true);
   });
 });

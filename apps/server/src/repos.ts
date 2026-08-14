@@ -844,8 +844,8 @@ export class SqliteRepos implements Repos {
       )
       .run(
         artifact.id,
-        artifact.key,
-        artifact.value,
+        artifact.key ?? artifact.id,
+        artifact.value ?? "",
         artifact.agentId ?? null,
         artifact.conversationId ?? null,
         artifact.createdAt,

@@ -293,3 +293,87 @@ describe("GitHubProvider (OAuth 2.1 & PKCE)", () => {
     expect(user.email).toBe("octocat@github.com");
   });
 });
+
+describe("Additional OAuth Providers (Microsoft, Slack, Notion, Dropbox)", () => {
+  it("builds Microsoft authorize URL and exchanges code", async () => {
+    const { MicrosoftProvider } = await import("./microsoft.js");
+    const provider = new MicrosoftProvider({ clientId: "ms_client_id", clientSecret: "ms_secret" });
+    const url = provider.buildAuthorizeUrl({
+      redirectUri: "https://app/callback",
+      state: "ms_state",
+      codeChallenge: "ms_challenge",
+    });
+    expect(url).toContain("login.microsoftonline.com");
+    expect(url).toContain("client_id=ms_client_id");
+
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "ms_access_token",
+          refresh_token: "ms_refresh_token",
+          expires_in: 3600,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const tokens = await provider.exchangeCode({
+      code: "ms_auth_code",
+      redirectUri: "https://app/callback",
+      codeVerifier: "ms_verifier",
+    });
+    expect(tokens.accessToken).toBe("ms_access_token");
+    expect(tokens.refreshToken).toBe("ms_refresh_token");
+  });
+
+  it("builds Slack authorize URL and exchanges code", async () => {
+    const { SlackProvider } = await import("./slack.js");
+    const provider = new SlackProvider({ clientId: "slack_client", clientSecret: "slack_sec" });
+    const url = provider.buildAuthorizeUrl({
+      redirectUri: "https://app/callback",
+      state: "slack_state",
+      codeChallenge: "",
+    });
+    expect(url).toContain("slack.com/oauth/v2/authorize");
+
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          access_token: "xoxp-slack-token",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const tokens = await provider.exchangeCode({
+      code: "slack_code",
+      redirectUri: "https://app/callback",
+      codeVerifier: "",
+    });
+    expect(tokens.accessToken).toBe("xoxp-slack-token");
+  });
+
+  it("builds Notion and Dropbox URLs", async () => {
+    const { NotionProvider } = await import("./notion.js");
+    const { DropboxProvider } = await import("./dropbox.js");
+    const notion = new NotionProvider({ clientId: "notion_client" });
+    const dropbox = new DropboxProvider({ clientId: "dropbox_client" });
+
+    const notionUrl = notion.buildAuthorizeUrl({
+      redirectUri: "https://app/callback",
+      state: "notion_state",
+      codeChallenge: "",
+    });
+    expect(notionUrl).toContain("api.notion.com");
+
+    const dropboxUrl = dropbox.buildAuthorizeUrl({
+      redirectUri: "https://app/callback",
+      state: "dbx_state",
+      codeChallenge: "dbx_challenge",
+    });
+    expect(dropboxUrl).toContain("dropbox.com/oauth2/authorize");
+  });
+});

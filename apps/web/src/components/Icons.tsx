@@ -357,9 +357,8 @@ export function IconArtifact(props: IconProps) {
 export function IconZagrosLogo(props: IconProps) {
   return (
     <Svg {...props}>
-      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-      <path d="M2 17l10 5 10-5" />
-      <path d="M2 12l10 5 10-5" />
+      <path d="M2 20l7-11 4.5 7 3.5-5.5L22 20H2z" />
+      <path d="M5 8c2.5-1 4.5-0.5 7 2 2.5-2.5 4.5-3 7-2-2 2-3.5 3-7 4-3.5-1-5-2-7-4z" />
     </Svg>
   );
 }

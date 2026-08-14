@@ -9,4 +9,8 @@ export interface OAuthAppConfig {
 export interface ConnectorsConfig {
   google?: OAuthAppConfig;
   github?: OAuthAppConfig;
+  microsoft?: OAuthAppConfig;
+  slack?: OAuthAppConfig;
+  notion?: OAuthAppConfig;
+  dropbox?: OAuthAppConfig;
 }

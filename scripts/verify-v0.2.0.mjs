@@ -187,7 +187,7 @@ async function main() {
       defaultModel: {
         driver: "openai-compatible",
         model: "mock-model",
-        baseUrl: `http://${LOCAL_IP}:${MOCK_PORT}/v1`,
+        baseUrl: `http://127.0.0.1:${MOCK_PORT}/v1`,
         temperature: 0.2,
         imageInput: true,
       },

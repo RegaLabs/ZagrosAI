@@ -76,7 +76,7 @@ function createFullMockRepos() {
 
     getArtifact: vi.fn(async (key: string) => artifacts.get(key)),
     listArtifacts: vi.fn(async () => Array.from(artifacts.values())),
-    saveArtifact: vi.fn(async (art: Artifact) => { artifacts.set(art.key, art); }),
+    saveArtifact: vi.fn(async (art: Artifact) => { artifacts.set(art.key ?? art.id, art); }),
 
     getRoutine: vi.fn(async (id: string) => routines.get(id)),
     listRoutines: vi.fn(async () => Array.from(routines.values())),

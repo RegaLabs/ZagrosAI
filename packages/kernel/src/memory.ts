@@ -112,7 +112,23 @@ export class MemoryManager {
     return scored.slice(0, opts?.limit ?? 8).map((s) => s.memory);
   }
 
-  async propose(candidate: MemoryCandidate): Promise<{ action: "stored" | "merged" | "ignored" }> {
+  async sweepExpired(): Promise<number> {
+    const all = await this.repos.listMemories(500);
+    const nowMs = Date.now();
+    let count = 0;
+    for (const m of all) {
+      if (m.expiresAt) {
+        const parsed = Date.parse(m.expiresAt);
+        if (!Number.isNaN(parsed) && parsed <= nowMs) {
+          await this.repos.deleteMemory(m.id);
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  async propose(candidate: MemoryCandidate): Promise<{ action: "stored" | "merged" | "ignored" | "ask_user"; memoryId?: string }> {
     if (!candidate.content || typeof candidate.content !== "string" || !candidate.content.trim()) {
       return { action: "ignored" };
     }
@@ -129,23 +145,28 @@ export class MemoryManager {
       }
       const isSameKind = !candidate.kind || memory.kind === candidate.kind;
       const isSameScope = !candidate.scope || memory.scope === candidate.scope;
-      if (isSameKind && isSameScope && overlapScore(candidate.content, memory.content) > 0.65) {
-        if (confidence > (memory.confidence ?? 0)) {
-          const mergedTags = Array.from(new Set([...(memory.tags ?? []), ...(candidate.tags ?? [])]));
-          await this.repos.saveMemory({
-            ...memory,
-            content: candidate.content,
-            confidence,
-            source: candidate.source ?? memory.source,
-            tags: mergedTags,
-            updatedAt: now(),
-          });
-          return { action: "merged" };
+      if (isSameKind && isSameScope) {
+        const score = overlapScore(candidate.content, memory.content);
+        if (score > 0.65) {
+          if (confidence > (memory.confidence ?? 0)) {
+            const mergedTags = Array.from(new Set([...(memory.tags ?? []), ...(candidate.tags ?? [])]));
+            await this.repos.saveMemory({
+              ...memory,
+              content: candidate.content,
+              confidence,
+              source: candidate.source ?? memory.source,
+              tags: mergedTags,
+              updatedAt: now(),
+            });
+            return { action: "merged", memoryId: memory.id };
+          }
+          return { action: "ignored", memoryId: memory.id };
+        } else if (score > 0.4 && confidence < 0.7) {
+          return { action: "ask_user", memoryId: memory.id };
         }
-        return { action: "ignored" };
       }
     }
-    await this.create({ ...candidate, confidence });
-    return { action: "stored" };
+    const created = await this.create({ ...candidate, confidence });
+    return { action: "stored", memoryId: created.id };
   }
 }

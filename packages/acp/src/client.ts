@@ -106,6 +106,13 @@ export class AcpClient {
     return { sessionId };
   }
 
+  async sessionResume(sessionId: string): Promise<{ sessionId: string }> {
+    await this.connect();
+    const result = await this.request("session/resume", { sessionId });
+    if (typeof result !== "object" || result === null) throw new Error("ACP session/resume: invalid response");
+    return { sessionId };
+  }
+
   async sessionClose(sessionId: string): Promise<void> {
     await this.connect().catch(() => undefined);
     try {

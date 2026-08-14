@@ -332,4 +332,4 @@ packages/
 
 ## License
 
-TBD — the project is source-available while a license is selected. Contributions are welcomed under the assumption of a permissive open-source license; see [CONTRIBUTING.md](CONTRIBUTING.md).
+[Apache License 2.0](LICENSE) — see the [LICENSE](LICENSE) file for details.
