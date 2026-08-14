@@ -64,17 +64,17 @@ async function main() {
   mkdirSync(WORKDIR, { recursive: true });
   console.log(`v0.7.0 verify workspace: ${WORKDIR}`);
 
-  const mock = spawn("node", ["scripts/mock-o-v7.mjs"], {
+  const mock = spawn("node", ["scripts/mock-oauth-mcp.mjs"], {
     cwd: ROOT,
     env: { ...process.env, MOCK_OAUTH_PORT: String(MOCK_PORT) },
     stdio: "inherit",
   });
-  const model = spawn("node", ["scripts/mock-m-v7.mjs"], {
+  const model = spawn("node", ["scripts/mock-model.mjs"], {
     cwd: ROOT,
     env: { ...process.env, MOCK_MODEL_PORT: String(MOCK_PORT + 1), MOCK_FLOW: "memory", MOCK_REPLY: "routine-run-ok" },
     stdio: "inherit",
   });
-  const failingModel = spawn("node", ["scripts/mock-m-v7.mjs"], {
+  const failingModel = spawn("node", ["scripts/mock-model.mjs"], {
     cwd: ROOT,
     env: { ...process.env, MOCK_MODEL_PORT: String(MOCK_PORT + 2), MOCK_FLOW: "fail" },
     stdio: "inherit",
@@ -87,7 +87,7 @@ async function main() {
   }).then((r) => r.ok).catch(() => false);
   if (!modelOk) throw new Error(`mock model did not come up on ${MOCK_PORT + 1}`);
 
-  const server = spawn("node", [join(ROOT, "apps/server/dist/server-v07.js")], {
+  const server = spawn("pnpm", ["--filter", "@zagros/server", "start"], {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -98,7 +98,7 @@ async function main() {
       ZAGROS_RUNNER_TOKEN: "v07-runner-token",
       ZAGROS_PUBLIC_URL: `http://127.0.0.1:${PORT}`,
     },
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
   server.stdout.on("data", (d) => appendFileSync(SERVER_LOG, d));
 
